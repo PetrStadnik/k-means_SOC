@@ -1,2 +1,2 @@
-# peta.stadnik-email.cz
-k-means_SOC
+# k-means (Středoškolská odborná činnost 2020)
+
