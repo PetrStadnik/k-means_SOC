@@ -1,8 +1,11 @@
+import sys
 import cv2
 import numpy as np
 import random as rnd
+from matplotlib import pyplot as plt
 from numba import jit
 from sklearn import metrics
+import time
 
 
 def initKMS(samples, nclus):
@@ -19,7 +22,30 @@ def initKMS(samples, nclus):
             conarr = np.isin(c, samples[j])
             con = np.any(conarr)
         c[i] = samples[j]
+    print(c)
     return c
+
+
+def createGraph(xname, x, yname, y, title, savename, logver=False, showval=False):
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    plt.plot(x, y)
+    plt.xlabel(xname)
+    plt.ylabel(yname)
+    plt.title(title)
+    if showval:
+        for i, v in enumerate(y):
+            ax.text(i, v + 25, "%d" % v, ha="center")
+    plt.savefig("graphs/test30/" + savename + ".eps", format="eps")
+    if logver:
+        plt.clf()
+        plt.xlabel(xname)
+        plt.ylabel(yname)
+        plt.title(title)
+        plt.yscale("log")
+        plt.plot(x, y)
+        plt.savefig("graphs/test30/" + savename + "_log.eps", format="eps")
+    plt.clf()
 
 
 def prepareData(img, positionWeight):
@@ -68,7 +94,7 @@ def prepareData(img, positionWeight):
     return arr
 
 
-def kms(fn, nclus, maxIteration, allowBGR=True, positionWeight=None):
+def kms(fn, nclus, stop=1e-5, maxIteration=300, allowBGR=True, positionWeight=None):
     if allowBGR:
         img = cv2.imread(fn)
     else:
@@ -113,6 +139,7 @@ def kms(fn, nclus, maxIteration, allowBGR=True, positionWeight=None):
         for i in range(len(centroids_arr[-1])):
             foo.append(np.linalg.norm(centroids_arr[-1][i] - c.copy()[i]))
         r_list.append(max(foo))
+        print(r_list)
         centroids_arr.append(c.copy())
         sum_list.append(sumOfAlldistance)
 
@@ -137,6 +164,7 @@ def createNewImage(img, c, inclus):
     width = img.shape[1]
     x = 0
     y = 0
+    print(c)
 
     if len(c.shape) > 1:
         for p in range(len(inclus)):  # array for new image
@@ -176,23 +204,44 @@ def determineBestLabel(sample, centroids):
 
 
 if __name__ == "__main__":
-    # MacQueen k-means algorithm outputs:   Array of centroids in each iteration
-    #                                       Value of Davies-Bouldin index for segmentation
-    #                                       Value of Calinski-Harabasz index for segmentation
-    #                                       Image after segmentation
-    #                                       Array of value of Price function in each iteration
-    #                                       Array of maximal variance in centroids moving after each iteration
-    #                                       Array of number of data-points changed cluster in each iteration
-    centroids_arr, \
-    DB_index, \
-    CH_index, \
-    img, \
-    sum_list, \
-    r_list, \
-    delta_list \
-        = kms(fn="some_image.jpg",  # Input image for segmentation
-              maxIteration=300,  # Set maximal number of iteration to stop algorithm if it won't stop before
-              nclus=3,  # Number of clusters
-              allowBGR=True,  # Set segmentation in BGR spectre if True, or in BW spectre if False
-              positionWeight=None)  # Set weight of position coordinates of pixels, None is equal 0
+
+    for n in range(1, 6):
+        dbi_arr = []
+        chi_arr = []
+        f = open("testLog/test30.txt", "a")
+        f.write("\n -------------------------*****************-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-**-\n bgr: " + str(n))
+        for k in range(3, 7):
+            for p in range(1, 4):
+                p = p / 10
+                sttime = time.time()
+                centroids_arr, DB_index, CH_index, img, sum_list, delta_list, r_list = kms(
+                    fn="imgs/BGR/bgrp" + str(n) + ".jpg", maxIteration=300, nclus=k, allowBGR=True,
+                    positionWeight=p)
+                np.save("arrays/MQ/centroids/bgrp" + str(n) + "k" + str(k) + "p" + str(p) +".npy", centroids_arr)
+                np.save("arrays/MQ/delta/bgrp" + str(n) + "k" + str(k) + "p" + str(p) + ".npy", delta_list)
+                np.save("arrays/MQ/price/bgrp" + str(n) + "k" + str(k) + "p" + str(p) + ".npy", sum_list)
+                np.save("arrays/MQ/r_function/bgrp" + str(n) + "k" + str(k) + "p" + str(p) + ".npy", r_list)
+
+                createGraph(xname="iterace", x=range(len(sum_list)), yname="cenová funkce", y=sum_list,
+                            title="Cenová funkce",
+                            savename="cenova_bgrp" + str(n) + "k" + str(k), logver=True)
+                createGraph(xname="iterace", x=range(len(sum_list)), yname="delta funkce", y=delta_list,
+                            title="Delta funkce", savename="delta_bgrp" + str(n) + "k" + str(k))
+                dbi_arr.append(DB_index)
+                chi_arr.append(CH_index)
+                print("DB_index  " + str(DB_index))
+                cv2.imwrite("savedImages/test30/bgrp" + str(n) + "_k" + str(k) + "p" + str(p) + ".jpg", img)
+                f.write("\n ------------------------------------------\n k: " + str(k))
+                f.write("\n DB: " + str(DB_index))
+                f.write("\n time: " + str(time.time() - sttime))
+                f.write("\n pocet iteraci: " + str(len(sum_list)))
+                f.write("\n cenova funkce: " + str(sum_list))
+                f.write("\n delta funkce: " + str(delta_list))
+            createGraph(xname="počet shluků", x=range(2, len(dbi_arr) + 2), yname="DBI", y=dbi_arr,
+                        title="Davis-Bouldin Index", savename="DBIbgrp" + str(n),
+                        showval=True)
+
+            np.save("arrays/MQ/DBI/bgrp" + str(n) + "p" + str(k) +".npy", dbi_arr)
+            np.save("arrays/MQ/CHI/bgrp" + str(n) + "p" + str(k) +".npy", chi_arr)
+        f.close()
     cv2.waitKey(0)
